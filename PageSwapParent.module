@@ -1,0 +1,165 @@
+<?php namespace ProcessWire;
+
+class PageSwapParent extends WireData implements Module, ConfigurableModule {
+
+    const MODULEFIELDNAME = "pageswapparenttoggle";
+
+    public static function getModuleInfo() {
+        return [
+            'title' => 'Page swap parent',
+            'summary' => 'test',
+            'href' => 'https://github.com/AlexandreTexier/Processwire-module---PageSwapParent',
+            'icon' => 'folder-open-o',
+            'version' => '1.0.0',
+            'author' => 'Alexandre Texier',
+            'autoload' => true,
+            'singular' => true,
+            'selectedMovableTemplates' => array(),
+            'selectedMainParentPage' => '',
+            'selectedSecondaryParentPage' => ''
+        ];
+    }
+
+    public function getModuleConfigInputfields(InputfieldWrapper $inputfields) {
+		//
+		// Selected template for use by module
+		$f = $this->modules->get('InputfieldAsmSelect');
+		$f->label = 'Selected archivable templates';
+		$f->description = 'movable templates';
+		$f->columnWidth = 100;
+        $f->collapsed   = 0;
+		$f->attr('name', 'selectedMovableTemplates');
+		$f->attr('value', $this->selectedMovableTemplates);
+		foreach ($this->templates as $t) {
+			if (!($t->flags & Template::flagSystem)) {
+				$f->addOption($t->id, $t->name);
+			}
+		}
+		$f->collapsed = Inputfield::collapsedNo;
+		$inputfields->add($f);
+        //
+        // Selected main parent page
+        $f = $this->modules->get('InputfieldPageListSelect');
+        $f->label = 'Selected main/default parent page';
+        $f->description = 'main page';
+        $f->columnWidth = 50;
+        $f->attr('name', 'selectedMainParentPage');
+        $f->attr('value', $this->selectedMainParentPage);
+        $f->required = true;
+        $f->collapsed = Inputfield::collapsedNo;
+        $inputfields->add($f);
+        //
+        // Selected secondary parent page
+        $f = $this->modules->get('InputfieldPageListSelect');
+        $f->label = 'Selected secondary parent page';
+        $f->description = 'secondary page';
+        $f->columnWidth = 50;
+        $f->attr('name', 'selectedSecondaryParentPage');
+        $f->attr('value', $this->selectedSecondaryParentPage);
+        $f->required = true;
+        $f->collapsed = Inputfield::collapsedNo;
+        $inputfields->add($f);
+	}
+
+    public function ready() {
+        //
+        $templates = wire('templates');      
+        //
+        if(wireCount($this->selectedMovableTemplates) > 0) {
+            // add field to templates if necessary
+            foreach($this->selectedMovableTemplates as $movableTemplate) {
+                $t = $templates->get("{$movableTemplate}");
+                if($t->id) {
+                    if(!$t->hasField(self::MODULEFIELDNAME)) {
+                        $t->fields->add(self::MODULEFIELDNAME);
+                        $t->fields->save();
+                    }
+                }
+            }
+            // remove field from non selected templates if necessary
+            foreach($templates as $template) {
+                if(!in_array($template->id, $this->selectedMovableTemplates)) {
+                    if($template->hasField(self::MODULEFIELDNAME)) {
+                        $template->fields->remove(self::MODULEFIELDNAME);
+                        $template->fields->save();
+                    }
+                }
+            }
+        }
+        // hook on selected pages
+        $this->pages->addHookAfter('save', function ($event) {
+            //
+            $page = $event->arguments(0);
+            $pages = wire('pages');
+            //
+            $array = array();
+            foreach ($this->selectedMovableTemplates as $key) { $array[] = $key; }
+            if(in_array($page->template->id, $array)){
+                //$event->message("page is concerned");
+                //
+                $togglefield = $page->getField(self::MODULEFIELDNAME);
+                $newBaseParent = $pages->findOne($this->selectedMainParentPage);
+                $newSecondaryParent = $pages->findOne($this->selectedSecondaryParentPage);
+                //              
+                // page inside base template
+                if($page->parent->id == $newBaseParent->id && $page->$togglefield == 1){
+                    $event->message("PageSwapParent to secondary parent page");
+                    //
+                    $page->of(false);
+                    $page->parent = $pages->get($newSecondaryParent->id);
+                    $page->save();
+                    $page->of(true);
+                } else if($page->parent->id == $newSecondaryParent->id && $page->$togglefield == 0){
+                    $event->message("PageSwapParent to main parent page");
+                    //
+                    $page->of(false);
+                    $page->parent = $pages->get($newBaseParent->id);
+                    $page->save();
+                    $page->of(true);
+                } else {
+                    //$event->message("page does not require any parent change");
+                    return;
+                }
+            }
+        });
+    }
+
+    public function ___install() {
+        $fields = wire('fields');
+        //
+        if(!$fields->get(self::MODULEFIELDNAME)) {
+          $field  = new Field;
+          $field->type = $this->modules->get("FieldtypeToggle");
+          $field->name = self::MODULEFIELDNAME;
+          $field->label = "Page parent";
+          $field->description = "Should the page be under selected secondary parent ?";
+          $field->icon = 'toggle-off';
+          $field->defaultOption = 'no';
+          $field->value = 0;
+          $field->useDeselect = false;
+          $field->useOther = false;
+          $field->useReverse = true;
+          $field->noLabel = "Main";
+          $field->yesLabel = "Secondary";
+          $field->save();
+        } else {
+          throw new WireException("A field with the name \"".self::MODULEFIELDNAME."\" already exists. The module cannot be installed");
+        }
+    }
+
+    public function ___uninstall() {
+        $fields = wire('fields');
+        $templates = wire('templates');
+        //
+        // remove field from concerned templates
+        foreach($templates as $template) {
+            if($template->hasField(self::MODULEFIELDNAME)) {
+                $template->fields->remove(self::MODULEFIELDNAME);
+                $template->fields->save();
+            }
+        }
+        // delete module togglefield
+        $fields->delete($fields->get(self::MODULEFIELDNAME));
+    }
+}
+?>
