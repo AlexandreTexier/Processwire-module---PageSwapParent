@@ -7,10 +7,10 @@ class PageSwapParent extends WireData implements Module, ConfigurableModule {
     public static function getModuleInfo() {
         return [
             'title' => 'Page swap parent',
-            'summary' => 'test',
+            'summary' => 'Configurable page parent swapping via simple on/off toggle',
             'href' => 'https://github.com/AlexandreTexier/Processwire-module---PageSwapParent',
             'icon' => 'folder-open-o',
-            'version' => '1.0.0',
+            'version' => '1.1.0',
             'author' => 'Alexandre Texier',
             'autoload' => true,
             'singular' => true,
@@ -24,8 +24,8 @@ class PageSwapParent extends WireData implements Module, ConfigurableModule {
 		//
 		// Selected template for use by module
 		$f = $this->modules->get('InputfieldAsmSelect');
-		$f->label = 'Selected archivable templates';
-		$f->description = 'movable templates';
+		$f->label = 'Selected swapable templates';
+		$f->description = '';
 		$f->columnWidth = 100;
         $f->collapsed   = 0;
 		$f->attr('name', 'selectedMovableTemplates');
@@ -41,7 +41,7 @@ class PageSwapParent extends WireData implements Module, ConfigurableModule {
         // Selected main parent page
         $f = $this->modules->get('InputfieldPageListSelect');
         $f->label = 'Selected main/default parent page';
-        $f->description = 'main page';
+        $f->description = '';
         $f->columnWidth = 50;
         $f->attr('name', 'selectedMainParentPage');
         $f->attr('value', $this->selectedMainParentPage);
@@ -52,7 +52,7 @@ class PageSwapParent extends WireData implements Module, ConfigurableModule {
         // Selected secondary parent page
         $f = $this->modules->get('InputfieldPageListSelect');
         $f->label = 'Selected secondary parent page';
-        $f->description = 'secondary page';
+        $f->description = '';
         $f->columnWidth = 50;
         $f->attr('name', 'selectedSecondaryParentPage');
         $f->attr('value', $this->selectedSecondaryParentPage);
@@ -87,35 +87,36 @@ class PageSwapParent extends WireData implements Module, ConfigurableModule {
             }
         }
         // hook on selected pages
-        $this->pages->addHookAfter('save', function ($event) {
+        $this->pages->addHookBefore('Pages::saveReady', function ($event) {
             //
             $page = $event->arguments(0);
             $pages = wire('pages');
             //
             $array = array();
             foreach ($this->selectedMovableTemplates as $key) { $array[] = $key; }
+            //
             if(in_array($page->template->id, $array)){
                 //$event->message("page is concerned");
                 //
                 $togglefield = $page->getField(self::MODULEFIELDNAME);
-                $newBaseParent = $pages->findOne($this->selectedMainParentPage);
-                $newSecondaryParent = $pages->findOne($this->selectedSecondaryParentPage);
+                $BaseParent = $pages->findOne($this->selectedMainParentPage);
+                $SecondaryParent = $pages->findOne($this->selectedSecondaryParentPage);
                 //              
                 // page inside base template
-                if($page->parent->id == $newBaseParent->id && $page->$togglefield == 1){
+                if($page->parent->id == $BaseParent->id && $page->$togglefield == 1){
                     $event->message("PageSwapParent to secondary parent page");
                     //
-                    $page->of(false);
-                    $page->parent = $pages->get($newSecondaryParent->id);
-                    $page->save();
-                    $page->of(true);
-                } else if($page->parent->id == $newSecondaryParent->id && $page->$togglefield == 0){
-                    $event->message("PageSwapParent to main parent page");
+                    // $page->of(false);
+                    $page->parent = $pages->get($SecondaryParent->id);
+                    // $page->save();
+                    // $page->of(true);
+                } else if($page->parent->id == $SecondaryParent->id && $page->$togglefield == 0){
+                    $event->message("PageSwapParent to default parent page");
                     //
-                    $page->of(false);
-                    $page->parent = $pages->get($newBaseParent->id);
-                    $page->save();
-                    $page->of(true);
+                    // $page->of(false);
+                    $page->parent = $pages->get($BaseParent->id);
+                    // $page->save();
+                    // $page->of(true);
                 } else {
                     //$event->message("page does not require any parent change");
                     return;
@@ -139,8 +140,8 @@ class PageSwapParent extends WireData implements Module, ConfigurableModule {
           $field->useDeselect = false;
           $field->useOther = false;
           $field->useReverse = true;
-          $field->noLabel = "Main";
-          $field->yesLabel = "Secondary";
+          $field->noLabel = "No";
+          $field->yesLabel = "Yes";
           $field->save();
         } else {
           throw new WireException("A field with the name \"".self::MODULEFIELDNAME."\" already exists. The module cannot be installed");
